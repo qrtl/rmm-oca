@@ -389,7 +389,9 @@ ul.auto-toc {
 <li>Go to General Settings &gt; Attachment Resize and enter the models you want to resize attachment images for in the ‘Attachment Image Resize Models’.</li>
 <li>In the same section, enter the maximum resolution you want to use for resizing attachment images in the ‘Attachment Image Max Resolution’.</li>
 </ol>
-<p>Note: If you want to resize the existing old attachment images for your resize models, run the ‘Resize Attachment Image’ scheduled action.</p>
+<p>Note: If you want to resize the existing attachment images for your resize models, run the ‘Resize Attachment Image’
+scheduled action. Each run will resize only 1,000 records to prevent prolonged processing times.
+You will need to run the action multiple times until all your records are resized.</p>
 </div>
 <div class="section" id="bug-tracker">
 <h1><a class="toc-backref" href="#toc-entry-2">Bug Tracker</a></h1>

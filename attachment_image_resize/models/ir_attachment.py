@@ -21,9 +21,9 @@ class IrAttachment(models.Model):
 
     @api.model
     def _resize_image(self, datas, is_raw=False):
-        ICP = self.env["ir.config_parameter"].sudo().get_param
         max_resolution = self.env.company.attachment_image_max_resolution or "1920x1920"
         max_width, max_height = map(int, max_resolution.split("x"))
+        ICP = self.env["ir.config_parameter"].sudo().get_param
         quality = int(ICP("base.image_autoresize_quality", 80))
         try:
             # Use odoo standard resize
@@ -46,6 +46,28 @@ class IrAttachment(models.Model):
             return datas
         return datas
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        # here we resize the image first to avoid bloating the filestore
+        for values in vals_list:
+            res_model = values.get("res_model")
+            models = self.env.company.attachment_image_resize_models
+            mimetype = values.get("mimetype") or self._compute_mimetype(values)
+            if (
+                res_model
+                and models
+                and res_model in models.split(",")
+                and mimetype in IMAGE_TYPES
+            ):
+                # Resize raw binary or Base64 data
+                if values.get("raw"):
+                    values["raw"] = self._resize_image(values["raw"], is_raw=True)
+                    values["resize_done"] = True
+                elif values.get("datas"):
+                    values["datas"] = self._resize_image(values["datas"], is_raw=False)
+                    values["resize_done"] = True
+        return super().create(vals_list)
+
     @api.model
     def _cron_resize_attachment_image(self, limit):
         models = self.env.company.attachment_image_resize_models
@@ -67,27 +89,3 @@ class IrAttachment(models.Model):
             for attachment in attachments:
                 attachment.datas = self._resize_image(attachment.datas)
                 attachments.resize_done = True
-            if len(attachments) == limit:
-                self.env.ref(
-                    "attachment_image_resize.resize_attachment_image"
-                )._trigger()
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        # here we resize the image first to avoid bloating the filestore
-        for values in vals_list:
-            res_model = values.get("res_model")
-            models = self.env.company.attachment_image_resize_models
-            mimetype = values.get("mimetype") or self._compute_mimetype(values)
-            if (
-                res_model
-                and models
-                and res_model in models.split(",")
-                and mimetype in IMAGE_TYPES
-            ):
-                # Resize raw binary or Base64 data
-                if "raw" in values and values["raw"]:
-                    values["raw"] = self._resize_image(values["raw"], is_raw=True)
-                elif "datas" in values and values["datas"]:
-                    values["datas"] = self._resize_image(values["datas"], is_raw=False)
-        return super(IrAttachment, self).create(vals_list)

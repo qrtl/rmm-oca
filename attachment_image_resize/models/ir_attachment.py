@@ -56,7 +56,7 @@ class IrAttachment(models.Model):
             if (
                 res_model
                 and models
-                and res_model in models.split(",")
+                and res_model in [model.strip() for model in models.split(",")]
                 and mimetype in IMAGE_TYPES
             ):
                 # Resize raw binary or Base64 data
@@ -71,7 +71,7 @@ class IrAttachment(models.Model):
     @api.model
     def _cron_resize_attachment_image(self, limit):
         models = self.env.company.attachment_image_resize_models
-        model_list = models.split(",") if models else []
+        model_list = [model.strip() for model in models.split(",")] if models else []
         if model_list:
             attachments = self.sudo().search(
                 [

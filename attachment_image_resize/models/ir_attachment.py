@@ -1,15 +1,7 @@
 # Copyright 2024 Quartile
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
-import io
-import logging
-
-from PIL import Image
-
 from odoo import api, fields, models
-from odoo.tools import ImageProcess
-
-_logger = logging.getLogger(__name__)
 
 IMAGE_TYPES = ["image/png", "image/jpeg", "image/bmp", "image/tiff"]
 
@@ -19,54 +11,9 @@ class IrAttachment(models.Model):
 
     resize_done = fields.Boolean()
 
-    @api.model
-    def _resize_image(self, datas, is_raw=False):
-        max_resolution = self.env.company.attachment_image_max_resolution or "1920x1920"
-        max_width, max_height = map(int, max_resolution.split("x"))
-        ICP = self.env["ir.config_parameter"].sudo().get_param
-        quality = int(ICP("base.image_autoresize_quality", 80))
-        try:
-            # Use odoo standard resize
-            if is_raw:
-                img = ImageProcess(False, verify_resolution=False)
-                img.image = Image.open(io.BytesIO(datas))
-                img.original_format = (img.image.format or "").upper()
-            else:
-                img = ImageProcess(datas, verify_resolution=False)
-            width, height = img.image.size
-            if width > max_width or height > max_height:
-                img = img.resize(max_width, max_height)
-                return (
-                    img.image_quality(quality=quality)
-                    if is_raw
-                    else img.image_base64(quality=quality)
-                )
-        except Exception as e:
-            _logger.warning(f"Failed to resize image: {e}")
-            return datas
-        return datas
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        # here we resize the image first to avoid bloating the filestore
-        for values in vals_list:
-            res_model = values.get("res_model")
-            models = self.env.company.attachment_image_resize_models
-            mimetype = values.get("mimetype") or self._compute_mimetype(values)
-            if (
-                res_model
-                and models
-                and res_model in [model.strip() for model in models.split(",")]
-                and mimetype in IMAGE_TYPES
-            ):
-                # Resize raw binary or Base64 data
-                if values.get("raw"):
-                    values["raw"] = self._resize_image(values["raw"], is_raw=True)
-                    values["resize_done"] = True
-                elif values.get("datas"):
-                    values["datas"] = self._resize_image(values["datas"], is_raw=False)
-                    values["resize_done"] = True
-        return super().create(vals_list)
+    def _postprocess_contents(self, values):
+        self = self.with_context(model=values.get("res_model"))
+        return super()._postprocess_contents(values)
 
     @api.model
     def _cron_resize_attachment_image(self, limit):
@@ -87,5 +34,12 @@ class IrAttachment(models.Model):
                 limit=limit,
             )
             for attachment in attachments:
-                attachment.datas = self._resize_image(attachment.datas)
-                attachments.resize_done = True
+                values = {
+                    "datas": attachment.datas,
+                    "mimetype": attachment.mimetype,
+                    "res_model": attachment.res_model,
+                }
+                processed = attachment._postprocess_contents(values)
+                if processed.get("datas") and processed["datas"] != attachment.datas:
+                    attachment.write({"datas": processed["datas"]})
+                attachment.resize_done = True

@@ -8,6 +8,10 @@
     "category": "Tools",
     "license": "AGPL-3",
     "depends": ["base_setup"],
-    "data": ["data/scheduler.xml", "views/res_config_settings_views.xml"],
+    "data": [
+        "data/scheduler.xml",
+        "views/ir_model_views.xml",
+        "views/res_config_settings_views.xml",
+    ],
     "installable": True,
 }

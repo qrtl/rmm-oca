@@ -15,7 +15,4 @@ class IrConfigParameter(models.Model):
         model_rec = self.env["ir.model"].search([("model", "=", res_model)], limit=1)
         if model_rec.attachment_image_max_resolution:
             return model_rec.attachment_image_max_resolution
-        models = self.env.company.attachment_image_resize_models
-        if models and res_model in [model.strip() for model in models.split(",")]:
-            return self.env.company.attachment_image_max_resolution or "1920x1920"
         return super().get_param(key, default=default)

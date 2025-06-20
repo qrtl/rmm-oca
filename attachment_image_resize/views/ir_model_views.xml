@@ -8,7 +8,10 @@
             <xpath expr="//sheet/group[1]" position="after">
                 <group name="attachment_image_resize">
                     <group>
-                        <field name="attachment_image_max_resolution" />
+                        <field
+                            name="attachment_image_max_resolution"
+                            placeholder="1025x1025"
+                        />
                     </group>
                 </group>
             </xpath>

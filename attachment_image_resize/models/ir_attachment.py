@@ -17,15 +17,10 @@ class IrAttachment(models.Model):
 
     @api.model
     def _cron_resize_attachment_image(self, limit):
-        models = self.env.company.attachment_image_resize_models
-        model_list = [model.strip() for model in models.split(",")] if models else []
-        model_list += [
+        model_list = [
             rec.model
             for rec in self.env["ir.model"].search(
-                [
-                    ("attachment_image_max_resolution", "!=", False),
-                    ("model", "not in", model_list),
-                ]
+                [("attachment_image_max_resolution", "!=", False)]
             )
         ]
         if model_list:

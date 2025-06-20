@@ -11,7 +11,6 @@
     "data": [
         "data/scheduler.xml",
         "views/ir_model_views.xml",
-        "views/res_config_settings_views.xml",
     ],
     "installable": True,
 }

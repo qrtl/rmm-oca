@@ -9,7 +9,11 @@ IMAGE_TYPES = ["image/png", "image/jpeg", "image/bmp", "image/tiff"]
 class IrAttachment(models.Model):
     _inherit = "ir.attachment"
 
-    resize_done = fields.Boolean()
+    resize_done = fields.Boolean(
+        help="Indicates whether the resizing process has been run on this record. "
+        "Once selected, the record will be excluded from "
+        "the _cron_resize_attachment_image() target."
+    )
 
     def _postprocess_contents(self, values):
         self = self.with_context(resize_target_model=values.get("res_model"))
@@ -17,12 +21,11 @@ class IrAttachment(models.Model):
 
     @api.model
     def _cron_resize_attachment_image(self, limit):
-        model_list = [
-            rec.model
-            for rec in self.env["ir.model"].search(
-                [("attachment_image_max_resolution", "!=", False)]
-            )
-        ]
+        model_list = (
+            self.env["ir.model"]
+            .search([("attachment_image_max_resolution", "!=", False)])
+            .mapped("model")
+        )
         if model_list:
             attachments = self.sudo().search(
                 [

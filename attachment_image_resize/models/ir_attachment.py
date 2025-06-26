@@ -16,7 +16,9 @@ class IrAttachment(models.Model):
     )
 
     def _postprocess_contents(self, values):
-        self = self.with_context(resize_target_model=values.get("res_model"))
+        self = self.with_context(
+            resize_target_model=self.res_model or values.get("res_model")
+        )
         self.resize_done = True
         return super()._postprocess_contents(values)
 

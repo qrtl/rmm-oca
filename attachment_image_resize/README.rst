@@ -28,9 +28,11 @@ Attachment Image Resize
 
 |badge1| |badge2| |badge3| |badge4| |badge5|
 
-This module can resize attachment images with a customizable resolution for specific models, configurable per company.
+This module resizes attachment images with customizable resolutions,
+configurable per model.
 
-Note: If the original image resolution is smaller than the customized resolution, it will not be resized.
+Note: If the original image resolution is smaller than the customized
+resolution, it will not be resized.
 
 **Table of contents**
 
@@ -40,12 +42,17 @@ Note: If the original image resolution is smaller than the customized resolution
 Configuration
 =============
 
-#. Go to General Settings > Attachment Resize and enter the models you want to resize attachment images for in the 'Attachment Image Resize Models'.
-#. In the same section, enter the maximum resolution you want to use for resizing attachment images in the 'Attachment Image Max Resolution'.
+If you want to apply the same resolution to multiple models:
 
-Note: If you want to resize the existing attachment images for your resize models, run the 'Resize Attachment Image'
-scheduled action. Each run will resize only 1,000 records to prevent prolonged processing times.
-You will need to run the action multiple times until all your records are resized.
+-  Go to Settings > Technical > Models.
+-  Select a model
+-  Set the Attachment Image Max Resolution field.
+
+Note: If you want to resize the existing attachment images for your
+resize models, run the 'Resize Attachment Image' scheduled action. Each
+run will resize only 1,000 records to prevent prolonged processing
+times. You will need to run the action multiple times until all your
+records are resized.
 
 Bug Tracker
 ===========
@@ -61,12 +68,20 @@ Credits
 =======
 
 Authors
-~~~~~~~
+-------
 
 * Quartile
 
+Contributors
+------------
+
+-  ``Quartile <https://www.quartile.co>``\ \_\_:
+
+   -  Aung Ko Ko Lin
+   -  Yoshi Tashiro
+
 Maintainers
-~~~~~~~~~~~
+-----------
 
 This module is maintained by the OCA.
 
@@ -77,6 +92,17 @@ This module is maintained by the OCA.
 OCA, or the Odoo Community Association, is a nonprofit organization whose
 mission is to support the collaborative development of Odoo features and
 promote its widespread use.
+
+.. |maintainer-yostashiro| image:: https://github.com/yostashiro.png?size=40px
+    :target: https://github.com/yostashiro
+    :alt: yostashiro
+.. |maintainer-aungkokolin1997| image:: https://github.com/aungkokolin1997.png?size=40px
+    :target: https://github.com/aungkokolin1997
+    :alt: aungkokolin1997
+
+Current `maintainers <https://odoo-community.org/page/maintainer-role>`__:
+
+|maintainer-yostashiro| |maintainer-aungkokolin1997| 
 
 This module is part of the `OCA/server-tools <https://github.com/OCA/server-tools/tree/15.0/attachment_image_resize>`_ project on GitHub.
 

@@ -12,5 +12,6 @@
         "data/scheduler.xml",
         "views/ir_model_views.xml",
     ],
+    "maintainers": ["yostashiro", "aungkokolin1997"],
     "installable": True,
 }

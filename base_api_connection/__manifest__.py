@@ -1,11 +1,11 @@
-# Copyright 2023 Quartile Limited
+# Copyright 2023 Quartile (https://www.quartile.co)
 # License LGPL-3.0 or later (https://www.gnu.org/licenses/lgpl).
 {
     "name": "Base API Connection",
-    "version": "16.0.1.0.0",
+    "version": "15.0.1.0.0",
     "category": "API",
     "website": "https://www.quartile.co",
-    "author": "Quartile Limited, Odoo Community Association (OCA)",
+    "author": "Quartile, Odoo Community Association (OCA)",
     "license": "LGPL-3",
     "depends": ["base"],
     "data": [

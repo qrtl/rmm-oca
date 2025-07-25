@@ -16,6 +16,8 @@ class APICallMixin(models.AbstractModel):
     _description = "API Call Mixin"
 
     def get_api_key(self, config):
+        if config.token_type:
+            return f"{config.token_type} {config.api_key}"
         return config.api_key
 
     def make_api_call(

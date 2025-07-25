@@ -23,7 +23,7 @@ class ApiConfig(models.Model):
     external_system = fields.Selection(
         [("generic", "Generic")], default="generic", required=True
     )
-    token_type  = fields.Char("Api Token Type")
+    token_type = fields.Char("Api Token Type")
     api_key = fields.Char(string="Api Key or Token", required=True)
 
     @api.constrains("code")

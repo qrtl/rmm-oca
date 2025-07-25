@@ -21,7 +21,7 @@
                         <field name="external_system" />
                         <field name="code" />
                         <field name="header_api_key_string" />
-                        <field name="token_type"/>
+                        <field name="token_type" />
                         <field name="api_key" password="True" />
                     </group>
                 </sheet>

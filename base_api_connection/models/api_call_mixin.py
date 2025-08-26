@@ -52,7 +52,20 @@ class APICallMixin(models.AbstractModel):
                 f"Successful API call to {url}. Response status code: {response.status_code}"
             )
         except requests.exceptions.HTTPError as e:
-            raise UserError(f"HTTP Error: {str(e)}") from e
+            r = getattr(e, "response", None)
+            status = getattr(r, "status_code", "n/a")
+            rid = getattr(getattr(r, "headers", {}), "get", lambda *_: None)(
+                "x-request-id"
+            )
+            body_text = ""
+            if r is not None:
+                try:
+                    body_text = json.dumps(r.json(), ensure_ascii=False)
+                except Exception:
+                    body_text = r.text or "<no body>"
+            raise UserError(
+                f"HTTP Error {status} (x-request-id={rid})\n{body_text[:2000]}"
+            ) from e
         except requests.exceptions.RequestException as e:
             raise UserError(f"Request Error: {str(e)}") from e
         return response

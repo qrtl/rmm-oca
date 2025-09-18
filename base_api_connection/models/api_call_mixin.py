@@ -35,14 +35,18 @@ class APICallMixin(models.AbstractModel):
         )
         if not config:
             raise UserError(_("API configuration not found."))
-        url = f"{config.base_url}/{endpoint}"
+        url = f"{config.base_url}"
+        if endpoint:
+            url = f"{url}/{endpoint}"
         headers = {"Content-Type": "application/json"}
         if custom_headers:
             headers.update(custom_headers)
         api_key = self.get_api_key(config)
         headers[config.header_api_key_string] = api_key
         function = getattr(requests, http_method)
-        kwargs = {"headers": headers, "params": params}
+        kwargs = {"headers": headers}
+        if params:
+            kwargs["params"] = params
         if json:
             kwargs["json"] = json
         try:

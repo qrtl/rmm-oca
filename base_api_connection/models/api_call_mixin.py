@@ -35,7 +35,7 @@ class APICallMixin(models.AbstractModel):
         )
         if not config:
             raise UserError(_("API configuration not found."))
-        url = f"{config.base_url}"
+        url = f"{config.base_url.rstrip('/')}"
         if endpoint:
             url = f"{url}/{endpoint}"
         headers = {"Content-Type": "application/json"}
@@ -47,7 +47,7 @@ class APICallMixin(models.AbstractModel):
         kwargs = {"headers": headers}
         if params:
             kwargs["params"] = params
-        if json:
+        if json is not None:
             kwargs["json"] = json
         try:
             response = function(url, **kwargs)

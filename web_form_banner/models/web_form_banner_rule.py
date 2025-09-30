@@ -8,11 +8,11 @@ from string import Template
 from dateutil import parser as dateparse
 from dateutil.relativedelta import relativedelta
 from lxml import etree
+from markupsafe import escape
 from pytz import timezone
 
 from odoo import _, api, fields, models, tools
 from odoo.exceptions import ValidationError
-from odoo.tools import html_escape
 from odoo.tools.float_utils import float_compare, float_is_zero, float_round
 from odoo.tools.safe_eval import safe_eval
 
@@ -255,7 +255,9 @@ class WebFormBannerRule(models.Model):
             rendered = rule.message or ""
         if rule.message_is_html:
             return rendered
-        return html_escape(rendered).replace("\n", "<br/>")
+        lines = rendered.split("\n")
+        escaped_lines = [escape(line) for line in lines]
+        return "<br/>".join(escaped_lines)
 
     @api.model
     def compute_message(self, rule_id, model, res_id, form_vals=None):

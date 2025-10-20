@@ -30,8 +30,13 @@ class APICallMixin(models.AbstractModel):
         json=None,
         http_method="get",
     ):
-        config = self.env["api.config"].search(
-            [("external_system", "=", external_system), ("code", "=", code)], limit=1
+        config = (
+            self.env["api.config"]
+            .sudo()
+            .search(
+                [("external_system", "=", external_system), ("code", "=", code)],
+                limit=1,
+            )
         )
         if not config:
             raise UserError(_("API configuration not found."))

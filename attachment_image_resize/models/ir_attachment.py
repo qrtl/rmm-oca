@@ -19,7 +19,7 @@ class IrAttachment(models.Model):
         self = self.with_context(
             resize_target_model=values.get("res_model") or self.res_model
         )
-        self.resize_done = True
+        values["resize_done"] = True
         return super()._postprocess_contents(values)
 
     @api.model

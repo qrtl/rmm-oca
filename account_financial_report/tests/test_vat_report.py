@@ -50,6 +50,16 @@ class TestVATReport(AccountTestInvoicingCommon):
     @classmethod
     def setUpClass(cls, chart_template_ref=None):
         super().setUpClass(chart_template_ref=chart_template_ref)
+        cls.env = cls.env(
+            context=dict(
+                cls.env.context,
+                mail_create_nolog=True,
+                mail_create_nosubscribe=True,
+                mail_notrack=True,
+                no_reset_password=True,
+                tracking_disable=True,
+            )
+        )
         cls.date_from = time.strftime("%Y-%m-01")
         cls.date_to = time.strftime("%Y-%m-28")
         cls.company = cls.env.user.company_id
@@ -209,7 +219,7 @@ class TestVATReport(AccountTestInvoicingCommon):
                 "tax_detail": True,
             }
         )
-        data = vat_report._prepare_vat_report()
+        data = vat_report._prepare_report_data()
         res_data = self.env[
             "report.account_financial_report.vat_report"
         ]._get_report_values(vat_report, data)

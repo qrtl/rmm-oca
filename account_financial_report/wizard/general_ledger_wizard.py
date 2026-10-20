@@ -103,8 +103,8 @@ class GeneralLedgerReportWizard(models.TransientModel):
             and self.account_code_to
             and self.account_code_to.code.isdigit()
         ):
-            start_range = int(self.account_code_from.code)
-            end_range = int(self.account_code_to.code)
+            start_range = self.account_code_from.code
+            end_range = self.account_code_to.code
             self.account_ids = self.env["account.account"].search(
                 [("code", ">=", start_range), ("code", "<=", end_range)]
             )
@@ -272,7 +272,7 @@ class GeneralLedgerReportWizard(models.TransientModel):
 
     def _print_report(self, report_type):
         self.ensure_one()
-        data = self._prepare_report_general_ledger()
+        data = self._prepare_report_data()
         if report_type == "xlsx":
             report_name = "a_f_r.report_general_ledger_xlsx"
         else:
@@ -285,31 +285,6 @@ class GeneralLedgerReportWizard(models.TransientModel):
             )
             .report_action(self, data=data)
         )
-
-    def _prepare_report_general_ledger(self):
-        self.ensure_one()
-        return {
-            "wizard_id": self.id,
-            "date_from": self.date_from,
-            "date_to": self.date_to,
-            "only_posted_moves": self.target_move == "posted",
-            "hide_account_at_0": self.hide_account_at_0,
-            "foreign_currency": self.foreign_currency,
-            "show_analytic_tags": self.show_analytic_tags,
-            "company_id": self.company_id.id,
-            "account_ids": self.account_ids.ids,
-            "partner_ids": self.partner_ids.ids,
-            "grouped_by": self.grouped_by,
-            "cost_center_ids": self.cost_center_ids.ids,
-            "show_cost_center": self.show_cost_center,
-            "analytic_tag_ids": self.analytic_tag_ids.ids,
-            "journal_ids": self.account_journal_ids.ids,
-            "centralize": self.centralize,
-            "fy_start_date": self.fy_start_date,
-            "unaffected_earnings_account": self.unaffected_earnings_account.id,
-            "account_financial_report_lang": self.env.lang,
-            "domain": self._get_account_move_lines_domain(),
-        }
 
     def _export(self, report_type):
         """Default export is PDF."""

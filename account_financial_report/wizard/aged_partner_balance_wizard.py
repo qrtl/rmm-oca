@@ -40,6 +40,23 @@ class AgedPartnerBalanceWizard(models.TransientModel):
         comodel_name="account.account",
         help="Ending account in a range",
     )
+    age_partner_config_id = fields.Many2one(
+        "account.age.report.configuration", string="Intervals configuration"
+    )
+    analytic_account_ids = fields.Many2many(
+        comodel_name="account.analytic.account", string="Filter analytic accounts"
+    )
+    no_analytic = fields.Boolean("Only no analytic items")
+    all_analytic = fields.Boolean("All analytic items")
+
+    @api.onchange("all_analytic", "no_analytic")
+    def on_change_all_analytic(self):
+        if self.all_analytic:
+            all_aa = self.env["account.analytic.account"].search([])
+            self.analytic_account_ids = all_aa
+            self.no_analytic = False
+        else:
+            self.analytic_account_ids = False
 
     @api.onchange("account_code_from", "account_code_to")
     def on_change_account_range(self):
@@ -49,8 +66,8 @@ class AgedPartnerBalanceWizard(models.TransientModel):
             and self.account_code_to
             and self.account_code_to.code.isdigit()
         ):
-            start_range = int(self.account_code_from.code)
-            end_range = int(self.account_code_to.code)
+            start_range = self.account_code_from.code
+            end_range = self.account_code_to.code
             self.account_ids = self.env["account.account"].search(
                 [
                     ("code", ">=", start_range),
@@ -83,17 +100,27 @@ class AgedPartnerBalanceWizard(models.TransientModel):
                 self.account_ids = self.account_ids.filtered(
                     lambda a: a.company_id == self.company_id
                 )
-        res = {"domain": {"account_ids": [], "partner_ids": []}}
+        res = {
+            "domain": {"account_ids": [], "partner_ids": [], "analytic_account_ids": []}
+        }
         if not self.company_id:
             return res
         else:
             res["domain"]["account_ids"] += [("company_id", "=", self.company_id.id)]
             res["domain"]["partner_ids"] += self._get_partner_ids_domain()
+            res["domain"]["analytic_account_ids"] += [
+                ("company_id", "=", self.company_id.id)
+            ]
         return res
 
     @api.onchange("account_ids")
     def onchange_account_ids(self):
-        return {"domain": {"account_ids": [("reconcile", "=", True)]}}
+        return {
+            "domain": {
+                "account_ids": [("reconcile", "=", True)],
+                "analytic_account_ids": [],
+            }
+        }
 
     @api.onchange("receivable_accounts_only", "payable_accounts_only")
     def onchange_type_accounts_only(self):
@@ -112,7 +139,7 @@ class AgedPartnerBalanceWizard(models.TransientModel):
 
     def _print_report(self, report_type):
         self.ensure_one()
-        data = self._prepare_report_aged_partner_balance()
+        data = self._prepare_report_data()
         if report_type == "xlsx":
             report_name = "a_f_r.report_aged_partner_balance_xlsx"
         else:
@@ -126,19 +153,24 @@ class AgedPartnerBalanceWizard(models.TransientModel):
             .report_action(self, data=data)
         )
 
-    def _prepare_report_aged_partner_balance(self):
-        self.ensure_one()
-        return {
-            "wizard_id": self.id,
-            "date_at": self.date_at,
-            "date_from": self.date_from or False,
-            "only_posted_moves": self.target_move == "posted",
-            "company_id": self.company_id.id,
-            "account_ids": self.account_ids.ids,
-            "partner_ids": self.partner_ids.ids,
-            "show_move_line_details": self.show_move_line_details,
-            "account_financial_report_lang": self.env.lang,
-        }
+    def _prepare_report_data(self):
+        res = super()._prepare_report_data()
+        res.update(
+            {
+                "date_at": self.date_at,
+                "date_from": self.date_from or False,
+                "only_posted_moves": self.target_move == "posted",
+                "company_id": self.company_id.id,
+                "account_ids": self.account_ids.ids,
+                "partner_ids": self.partner_ids.ids,
+                "show_move_line_details": self.show_move_line_details,
+                "account_financial_report_lang": self.env.lang,
+                "age_partner_config_id": self.age_partner_config_id.id,
+                "analytic_account_ids": self.analytic_account_ids.ids or [],
+                "no_analytic": self.no_analytic,
+            }
+        )
+        return res
 
     def _export(self, report_type):
         """Default export is PDF."""

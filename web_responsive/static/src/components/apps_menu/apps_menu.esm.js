@@ -1,9 +1,9 @@
 /** @odoo-module **/
 /* Copyright 2018 Tecnativa - Jairo Llopis
  * Copyright 2021 ITerra - Sergey Shebanin
+ * Copyright 2021 Onestein - Anjeel Haria
  * License LGPL-3.0 or later (http://www.gnu.org/licenses/lgpl). */
 
-import {Dropdown} from "@web/core/dropdown/dropdown";
 import {NavBar} from "@web/webclient/navbar/navbar";
 import {useAutofocus, useBus, useService} from "@web/core/utils/hooks";
 import {useHotkey} from "@web/core/hotkeys/hotkey_hook";
@@ -15,37 +15,39 @@ import {patch} from "web.utils";
 
 const {Component} = owl;
 const {useState, useRef} = owl.hooks;
+import {unlinkAll} from "@mail/model/model_field_command";
 
 // Patch WebClient to show AppsMenu instead of default app
 patch(WebClient.prototype, "web_responsive.DefaultAppsMenu", {
     setup() {
         this._super();
-        useBus(Dropdown.bus, "state-changed", (payload) => {
-            if (payload.emitter.el.classList.contains("o_navbar_apps_menu")) {
-                this.el.classList.toggle("o_apps_menu_opened", payload.newState.open);
-                this.el.classList.toggle("o_first_app", false);
-            }
+        useBus(this.env.bus, "APPS_MENU:STATE_CHANGED", (payload) => {
+            this.el.classList.toggle("o_apps_menu_opened", payload);
         });
-    },
-    _loadDefaultApp() {
-        var menu_apps_dropdown = document.querySelector(
-            ".o_navbar_apps_menu .dropdown-toggle"
-        );
-        menu_apps_dropdown.click();
-        this.el.classList.toggle("o_apps_menu_opened", true);
-        this.el.classList.toggle("o_first_app", true);
-        return true;
     },
 });
 
 /**
  * @extends Dropdown
  */
-export class AppsMenu extends Dropdown {
+export class AppsMenu extends Component {
     setup() {
         super.setup();
-        useBus(this.env.bus, "ACTION_MANAGER:UI-UPDATED", () => this.close());
-        useBus(this.env.bus, "APPS_MENU:CLOSE", () => this.close());
+        this.state = useState({open: false});
+        useBus(this.env.bus, "ACTION_MANAGER:UI-UPDATED", async () => {
+            this.setState(false);
+            const messaging = await Component.env.services.messaging.get();
+            messaging.dialogManager.update({
+                dialogs: unlinkAll(),
+            });
+        });
+        useBus(this.env.bus, "APPS_MENU:CLOSE", () => {
+            this.setState(false);
+        });
+    }
+    setState(state) {
+        this.state.open = state;
+        this.env.bus.trigger("APPS_MENU:STATE_CHANGED", state);
     }
 }
 
@@ -110,6 +112,7 @@ export class AppsMenuSearchBar extends Component {
         this.state = useState({
             results: [],
             offset: 0,
+            hasResults: false,
         });
         useAutofocus({selector: "input"});
         this.searchBarInput = useRef("SearchBarInput");
@@ -152,10 +155,10 @@ export class AppsMenuSearchBar extends Component {
      */
     _searchMenus() {
         const query = this.searchBarInput.el.value;
-        this.state.results =
-            query === ""
-                ? []
-                : fuzzyLookup(query, _.keys(this._searchableMenus), (k) => k);
+        this.state.hasResults = query !== "";
+        this.state.results = this.state.hasResults
+            ? fuzzyLookup(query, _.keys(this._searchableMenus), (k) => k)
+            : [];
     }
 
     /**
@@ -222,11 +225,14 @@ export class AppsMenuSearchBar extends Component {
             const query = this.searchBarInput.el.value;
             if (query) {
                 this.searchBarInput.el.value = "";
+                this.state.results = [];
+                this.state.hasResults = false;
             } else {
-                this.env.bus.trigger("APPS_MENU:CLOSE");
+                this.env.bus.trigger("ACTION_MANAGER:UI-UPDATED");
             }
         }
     }
 }
+AppsMenu.template = "web_responsive.AppsMenu";
 AppsMenuSearchBar.template = "web_responsive.AppsMenuSearchResults";
 Object.assign(NavBar.components, {AppsMenu, AppsMenuSearchBar});

@@ -1,4 +1,5 @@
 # Copyright 2017 ForgeFlow S.L.
+# Copyright 2022-2023 Tecnativa - Víctor Martínez
 # License LGPL-3.0 or later (http://www.gnu.org/licenses/lgpl-3.0).
 
 from collections import Counter
@@ -11,11 +12,19 @@ from odoo.tests import common, new_test_user
 class TestStockRequest(common.TransactionCase):
     def setUp(self):
         super().setUp()
-
+        self.env = self.env(
+            context=dict(
+                self.env.context,
+                mail_create_nolog=True,
+                mail_create_nosubscribe=True,
+                mail_notrack=True,
+                no_reset_password=True,
+                tracking_disable=True,
+            )
+        )
         # common models
         self.stock_request = self.env["stock.request"]
         self.request_order = self.env["stock.request.order"]
-
         # refs
         self.stock_request_user_group = self.env.ref(
             "stock_request.group_stock_request_user"
@@ -24,7 +33,6 @@ class TestStockRequest(common.TransactionCase):
         self.warehouse = self.env.ref("stock.warehouse0")
         self.categ_unit = self.env.ref("uom.product_uom_categ_unit")
         self.virtual_loc = self.env.ref("stock.stock_location_customers")
-
         # common data
         self.company_2 = self.env["res.company"].create(
             {"name": "Comp2", "parent_id": self.main_company.id}
@@ -37,69 +45,41 @@ class TestStockRequest(common.TransactionCase):
         self.wh2 = self.env["stock.warehouse"].search(
             [("company_id", "=", self.company_2.id)], limit=1
         )
-        ctx = {
-            "mail_create_nolog": True,
-            "mail_create_nosubscribe": True,
-            "mail_notrack": True,
-            "no_reset_password": True,
-        }
         self.stock_request_user = new_test_user(
             self.env,
             login="stock_request_user",
             groups="stock_request.group_stock_request_user",
             company_ids=[(6, 0, [self.main_company.id, self.company_2.id])],
-            context=ctx,
         )
         self.stock_request_manager = new_test_user(
             self.env,
             login="stock_request_manager",
             groups="stock_request.group_stock_request_manager",
             company_ids=[(6, 0, [self.main_company.id, self.company_2.id])],
-            context=ctx,
         )
         self.product = self._create_product("SH", "Shoes", False)
         self.product_company_2 = self._create_product(
             "SH_2", "Shoes", self.company_2.id
         )
-
-        self.ressuply_loc = self.env["stock.location"].create(
-            {
-                "name": "Ressuply",
-                "location_id": self.warehouse.view_location_id.id,
-                "usage": "internal",
-                "company_id": self.main_company.id,
-            }
+        self.ressuply_loc = self._create_location(
+            name="Ressuply",
+            location_id=self.warehouse.view_location_id.id,
+            company_id=self.main_company.id,
         )
-
-        self.ressuply_loc_2 = self.env["stock.location"].create(
-            {
-                "name": "Ressuply",
-                "location_id": self.wh2.view_location_id.id,
-                "usage": "internal",
-                "company_id": self.company_2.id,
-            }
+        self.ressuply_loc_2 = self._create_location(
+            name="Ressuply",
+            location_id=self.wh2.view_location_id.id,
+            company_id=self.company_2.id,
         )
-
-        self.route = self.env["stock.location.route"].create(
-            {
-                "name": "Transfer",
-                "product_categ_selectable": False,
-                "product_selectable": True,
-                "company_id": self.main_company.id,
-                "sequence": 10,
-            }
+        self.route = self._create_location_route(
+            name="Transfer", company_id=self.main_company.id
         )
-
-        self.route_2 = self.env["stock.location.route"].create(
-            {
-                "name": "Transfer",
-                "product_categ_selectable": False,
-                "product_selectable": True,
-                "company_id": self.company_2.id,
-                "sequence": 10,
-            }
+        self.route_2 = self._create_location_route(
+            name="Transfer", company_id=self.company_2.id
         )
-
+        self.route_3 = self._create_location_route(
+            name="Transfer", company_id=self.main_company.id
+        )
         self.uom_dozen = self.env["uom.uom"].create(
             {
                 "name": "Test-DozenA",
@@ -109,7 +89,6 @@ class TestStockRequest(common.TransactionCase):
                 "rounding": 0.001,
             }
         )
-
         self.env["stock.rule"].create(
             {
                 "name": "Transfer",
@@ -123,7 +102,6 @@ class TestStockRequest(common.TransactionCase):
                 "company_id": self.main_company.id,
             }
         )
-
         self.env["stock.rule"].create(
             {
                 "name": "Transfer",
@@ -137,7 +115,6 @@ class TestStockRequest(common.TransactionCase):
                 "company_id": self.company_2.id,
             }
         )
-
         self.env["ir.config_parameter"].sudo().set_param(
             "stock.no_auto_scheduler", "True"
         )
@@ -173,10 +150,28 @@ class TestStockRequest(common.TransactionCase):
     def _create_product_attribute(self, name):
         return self.env["product.attribute"].create({"name": name})
 
+    def _create_location(self, **vals):
+        return self.env["stock.location"].create(dict(usage="internal", **vals))
+
+    def _create_location_route(self, **vals):
+        return self.env["stock.location.route"].create(
+            dict(
+                product_categ_selectable=False,
+                product_selectable=True,
+                sequence=10,
+                **vals
+            )
+        )
+
 
 class TestStockRequestBase(TestStockRequest):
     def setUp(self):
         super().setUp()
+
+    def _create_stock_quant(self, product, location, qty):
+        self.env["stock.quant"].create(
+            {"product_id": product.id, "location_id": location.id, "quantity": qty}
+        )
 
     def test_defaults(self):
         vals = {
@@ -537,6 +532,124 @@ class TestStockRequestBase(TestStockRequest):
         with self.assertRaises(exceptions.ValidationError):
             self.request_order.with_user(self.stock_request_user).create(vals)
 
+    def test_stock_request_order_available_stock_01(self):
+        self.main_company.stock_request_check_available_first = True
+        self._create_stock_quant(self.product, self.warehouse.lot_stock_id, 6)
+        expected_date = fields.Datetime.now()
+        vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "expected_date": expected_date,
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 5.0,
+                        "company_id": self.main_company.id,
+                        "warehouse_id": self.warehouse.id,
+                        "location_id": self.warehouse.lot_stock_id.id,
+                        "expected_date": expected_date,
+                    },
+                )
+            ],
+        }
+        order = self.request_order.with_user(self.stock_request_user).create(vals)
+        order.action_confirm()
+        self.assertEqual(order.stock_request_ids.state, "done")
+        self.assertEqual(order.state, "done")
+        self.assertEqual(len(order.stock_request_ids.move_ids), 1)
+        quant_stock = self.product.stock_quant_ids.filtered(
+            lambda x: x.location_id == self.warehouse.lot_stock_id
+        )
+        self.assertEqual(quant_stock.quantity, 6)
+
+    def test_stock_request_order_available_stock_02(self):
+        self.main_company.stock_request_check_available_first = True
+        self.location_child_1 = self._create_location(
+            name="Child 1",
+            location_id=self.warehouse.lot_stock_id.id,
+            company_id=self.main_company.id,
+        )
+        self.location_child_2 = self._create_location(
+            name="Child 2",
+            location_id=self.warehouse.lot_stock_id.id,
+            company_id=self.main_company.id,
+        )
+        self._create_stock_quant(self.product, self.location_child_1, 6)
+        expected_date = fields.Datetime.now()
+        vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.location_child_1.id,
+            "expected_date": expected_date,
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 5.0,
+                        "company_id": self.main_company.id,
+                        "warehouse_id": self.warehouse.id,
+                        "location_id": self.location_child_1.id,
+                        "expected_date": expected_date,
+                    },
+                )
+            ],
+        }
+        order = self.request_order.with_user(self.stock_request_user).create(vals)
+        order.action_confirm()
+        self.assertEqual(order.stock_request_ids.state, "done")
+        self.assertEqual(order.state, "done")
+        self.assertEqual(len(order.stock_request_ids.move_ids), 1)
+
+    def test_stock_request_order_available_stock_03(self):
+        self.main_company.stock_request_check_available_first = True
+        self.location_child_1 = self._create_location(
+            name="Child 1",
+            location_id=self.warehouse.lot_stock_id.id,
+            company_id=self.main_company.id,
+        )
+        self.location_child_2 = self._create_location(
+            name="Child 2",
+            location_id=self.warehouse.lot_stock_id.id,
+            company_id=self.main_company.id,
+        )
+        self._create_stock_quant(self.product, self.location_child_1, 3)
+        self._create_stock_quant(self.product, self.location_child_2, 2)
+        expected_date = fields.Datetime.now()
+        vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "expected_date": expected_date,
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 5.0,
+                        "company_id": self.main_company.id,
+                        "warehouse_id": self.warehouse.id,
+                        "location_id": self.warehouse.lot_stock_id.id,
+                        "expected_date": expected_date,
+                    },
+                )
+            ],
+        }
+        order = self.request_order.with_user(self.stock_request_user).create(vals)
+        order.action_confirm()
+        self.assertEqual(order.stock_request_ids.state, "done")
+        self.assertEqual(order.state, "done")
+        self.assertEqual(len(order.stock_request_ids.move_ids), 2)
+
     def test_stock_request_validations_01(self):
         vals = {
             "product_id": self.product.id,
@@ -714,7 +827,7 @@ class TestStockRequestBase(TestStockRequest):
         self.assertEqual(stock_request_2.qty_in_progress, 0)
         self.assertEqual(stock_request_2.qty_done, 0)
         self.assertEqual(stock_request_2.qty_cancelled, 6)
-        self.assertEqual(stock_request_2.state, "done")
+        self.assertEqual(stock_request_2.state, "cancel")
 
     def test_cancel_request(self):
         expected_date = fields.Datetime.now()
@@ -1120,8 +1233,472 @@ class TestStockRequestBase(TestStockRequest):
         sr2.refresh()
         sr3.refresh()
         self.assertEqual(sr1.state, "done")
+        self.assertEqual(sr1.qty_done, 5)
         self.assertEqual(sr1.qty_cancelled, 0)
-        self.assertEqual(sr2.state, "done")
+        self.assertEqual(sr2.state, "cancel")
+        self.assertEqual(sr2.qty_done, 1)
         self.assertEqual(sr2.qty_cancelled, 4)
-        self.assertEqual(sr3.state, "done")
+        self.assertEqual(sr3.state, "cancel")
+        self.assertEqual(sr3.qty_done, 0)
         self.assertEqual(sr3.qty_cancelled, 5)
+        # Set the request order to done if there are any delivered lines
+        self.assertEqual(order.state, "done")
+
+
+class TestStockRequestOrderState(TestStockRequest):
+    def setUp(self):
+        super().setUp()
+        self.product_a = self._create_product(
+            "CODEA",
+            "Product A",
+            self.main_company.id,
+        )
+        self.product_a.route_ids = [(6, 0, self.route.ids)]
+        self.product_b = self._create_product(
+            "CODEB",
+            "Product B",
+            self.main_company.id,
+        )
+        self.product_b.route_ids = [(6, 0, self.route.ids)]
+        expected_date = fields.Datetime.now()
+        vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "expected_date": expected_date,
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product_a.id,
+                        "product_uom_id": self.product_a.uom_id.id,
+                        "product_uom_qty": 1.0,
+                        "company_id": self.main_company.id,
+                        "warehouse_id": self.warehouse.id,
+                        "location_id": self.warehouse.lot_stock_id.id,
+                        "expected_date": expected_date,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product_b.id,
+                        "product_uom_id": self.product_b.uom_id.id,
+                        "product_uom_qty": 1.0,
+                        "company_id": self.main_company.id,
+                        "warehouse_id": self.warehouse.id,
+                        "location_id": self.warehouse.lot_stock_id.id,
+                        "expected_date": expected_date,
+                    },
+                ),
+            ],
+        }
+        self.order = self.request_order.new(vals)
+        self.request_a = self.order.stock_request_ids.filtered(
+            lambda x: x.product_id == self.product_a
+        )
+        self.request_b = self.order.stock_request_ids.filtered(
+            lambda x: x.product_id == self.product_b
+        )
+
+    def test_stock_request_order_state_01(self):
+        """Request A: Done + Request B: Done = Done."""
+        self.order.action_confirm()
+        self.request_a.action_done()
+        self.request_b.action_done()
+        self.assertEqual(self.request_a.state, "done")
+        self.assertEqual(self.request_b.state, "done")
+        self.assertEqual(self.order.state, "done")
+
+    def test_stock_request_order_state_02(self):
+        """Request A: Cancel + Request B: Cancel = Cancel."""
+        self.order.action_confirm()
+        self.request_a.action_cancel()
+        self.request_b.action_cancel()
+        self.assertEqual(self.request_a.state, "cancel")
+        self.assertEqual(self.request_b.state, "cancel")
+        self.assertEqual(self.order.state, "cancel")
+
+    def test_stock_request_order_state_03(self):
+        """Request A: Done + Request B: Cancel = Done."""
+        self.order.action_confirm()
+        self.request_a.action_done()
+        self.request_b.action_cancel()
+        self.assertEqual(self.request_a.state, "done")
+        self.assertEqual(self.request_b.state, "cancel")
+        self.assertEqual(self.order.state, "done")
+
+    def test_stock_request_order_state_04(self):
+        """Request A: Cancel + Request B: Done = DOne."""
+        self.order.action_confirm()
+        self.request_a.action_cancel()
+        self.request_b.action_done()
+        self.assertEqual(self.request_a.state, "cancel")
+        self.assertEqual(self.request_b.state, "done")
+        self.assertEqual(self.order.state, "done")
+
+    def test_rounding_half_up_in_progress_01(self):
+        product_half_up = self._create_product(
+            "HALFUP", "HalfUp Product", self.main_company.id
+        )
+        product_half_up.uom_id.rounding = 1.0
+        vals = {
+            "product_id": product_half_up.id,
+            "product_uom_id": product_half_up.uom_id.id,
+            "product_uom_qty": 0.5,
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.virtual_loc.id,
+        }
+        stock_request = self.stock_request.create(vals)
+        stock_request.action_confirm()
+        self.assertEqual(
+            stock_request.qty_in_progress,
+            1,
+            "Quantity in progress should be the rounded up quantity after confirmation",
+        )
+
+    def test_rounding_half_up_in_progress_02(self):
+        product_half_up = self._create_product(
+            "HALFUP", "HalfUp Product", self.main_company.id
+        )
+        product_half_up.uom_id.rounding = 1.0
+        vals = {
+            "product_id": product_half_up.id,
+            "product_uom_id": product_half_up.uom_id.id,
+            "product_uom_qty": 1.49,
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.virtual_loc.id,
+        }
+        stock_request = self.stock_request.create(vals)
+        stock_request.action_confirm()
+        self.assertEqual(
+            stock_request.qty_in_progress,
+            1,
+            "Quantity in progress should be the rounded down quantity after confirmation",
+        )
+
+    def test_route_id_propagation_on_creation(self):
+        order_vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "expected_date": fields.Datetime.now(),
+            "route_id": self.route.id,
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 5.0,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 10.0,
+                    },
+                ),
+            ],
+        }
+        order = self.request_order.create(order_vals)
+        self.assertEqual(len(order.stock_request_ids), 2)
+        order.write({"route_id": self.route_3})
+        for request in order.stock_request_ids:
+            self.assertEqual(
+                request.route_id.id,
+                order.route_id.id,
+                "The route_id from stock.request.order has not "
+                "been set in the associated stock.requests.",
+            )
+
+    def test_compute_route_id_consistency_1(self):
+        order_vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "expected_date": fields.Datetime.now(),
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 5.0,
+                        "route_id": self.route.id,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 10.0,
+                        "route_id": self.route_3.id,
+                    },
+                ),
+            ],
+        }
+        order = self.request_order.create(order_vals)
+        order._compute_route_id()
+        self.assertFalse(
+            order.route_id,
+            "Route ID should be False due to inconsistent routes in stock requests.",
+        )
+
+    def test_compute_route_id_consistency_2(self):
+        order_vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "expected_date": fields.Datetime.now(),
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 5.0,
+                        "route_id": self.route.id,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 10.0,
+                        "route_id": self.route.id,
+                    },
+                ),
+            ],
+        }
+        order = self.request_order.create(order_vals)
+        order._compute_route_id()
+        self.assertEqual(order.route_id, self.route)
+
+    def test_inverse_route_id_propagation(self):
+        order_vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "expected_date": fields.Datetime.now(),
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 5.0,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 10.0,
+                    },
+                ),
+            ],
+        }
+        order = self.request_order.create(order_vals)
+        order.route_id = self.route.id
+        order._inverse_route_id()
+        for request in order.stock_request_ids:
+            self.assertEqual(
+                request.route_id.id,
+                self.route.id,
+                "Route ID should propagate to all stock requests.",
+            )
+
+    def test_onchange_route_id_propagation(self):
+        order_vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "expected_date": fields.Datetime.now(),
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 5.0,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product.id,
+                        "product_uom_id": self.product.uom_id.id,
+                        "product_uom_qty": 10.0,
+                    },
+                ),
+            ],
+        }
+        order = self.request_order.create(order_vals)
+        order.route_id = self.route.id
+        order._onchange_route_id()
+        for request in order.stock_request_ids:
+            self.assertEqual(
+                request.route_id.id,
+                self.route.id,
+                "Route ID should update on all stock requests on onchange.",
+            )
+
+
+class TestStockRequestOrder(common.TransactionCase):
+    def setUp(self):
+        super().setUp()
+        self.env = self.env(
+            context=dict(
+                self.env.context,
+                mail_create_nolog=True,
+                mail_create_nosubscribe=True,
+                mail_notrack=True,
+                no_reset_password=True,
+                tracking_disable=True,
+            )
+        )
+        self.request_order = self.env["stock.request.order"]
+        self.stock_request = self.env["stock.request"]
+        self.main_company = self.env.ref("base.main_company")
+        self.warehouse = self.env.ref("stock.warehouse0")
+        self.uom_unit = self.env.ref("uom.product_uom_unit")
+        self.uom_dozen = self.env.ref("uom.product_uom_dozen")
+        self.stock_request_user = new_test_user(
+            self.env,
+            login="stock_request_user",
+            groups="stock_request.group_stock_request_user",
+            company_ids=[(6, 0, [self.main_company.id])],
+        )
+        self.stock_request_manager = new_test_user(
+            self.env,
+            login="stock_request_manager",
+            groups="stock_request.group_stock_request_manager",
+            company_ids=[(6, 0, [self.main_company.id])],
+        )
+        self.product_test = self._create_product("PROD", "Product Test")
+        self.stock_loc = self._create_location(
+            name="Backstock",
+            location_id=self.warehouse.view_location_id.id,
+            company_id=self.main_company.id,
+        )
+        self.transit_loc = self._create_location(
+            name="Transit",
+            location_id=self.warehouse.view_location_id.id,
+            company_id=self.main_company.id,
+        )
+        self.manufacturing_loc = self._create_location(
+            name="Manufacturing",
+            location_id=self.warehouse.view_location_id.id,
+            company_id=self.main_company.id,
+        )
+        self.route = self.env["stock.location.route"].create(
+            {
+                "name": "Backstock to Manufacturing (2 steps)",
+                "warehouse_selectable": True,
+                "warehouse_ids": [(6, 0, [self.warehouse.id])],
+                "rule_ids": [
+                    (
+                        0,
+                        False,
+                        {
+                            "name": "Stock to Transit",
+                            "location_src_id": self.stock_loc.id,
+                            "location_id": self.transit_loc.id,
+                            "action": "pull",
+                            "picking_type_id": self.warehouse.int_type_id.id,
+                            "procure_method": "make_to_stock",
+                            "warehouse_id": self.warehouse.id,
+                            "company_id": self.main_company.id,
+                        },
+                    ),
+                    (
+                        0,
+                        False,
+                        {
+                            "name": "Transit to Manufacturing",
+                            "location_src_id": self.transit_loc.id,
+                            "location_id": self.manufacturing_loc.id,
+                            "action": "pull_push",
+                            "picking_type_id": self.warehouse.int_type_id.id,
+                            "procure_method": "make_to_order",
+                            "warehouse_id": self.warehouse.id,
+                            "company_id": self.main_company.id,
+                        },
+                    ),
+                ],
+            }
+        )
+        self.product_test.route_ids = [(6, 0, [self.route.id])]
+        self._create_stock_quant(self.stock_loc, self.product_test, 5)
+
+    def _create_product(self, default_code, name, **vals):
+        return self.env["product.product"].create(
+            dict(
+                name=name,
+                default_code=default_code,
+                uom_id=self.uom_unit.id,
+                uom_po_id=self.uom_dozen.id,
+                type="product",
+                **vals
+            )
+        )
+
+    def _create_location(self, **vals):
+        return self.env["stock.location"].create(dict(usage="internal", **vals))
+
+    def _create_stock_quant(self, location_id, product_id, qty):
+        self.env["stock.quant"].create(
+            {
+                "location_id": location_id.id,
+                "product_id": product_id.id,
+                "quantity": qty,
+            }
+        )
+
+    def test_two_pickings_related(self):
+        """Test to check that order has two related pickings after confirmation"""
+        expected_date = fields.Datetime.now()
+        vals = {
+            "company_id": self.main_company.id,
+            "warehouse_id": self.warehouse.id,
+            "location_id": self.manufacturing_loc.id,
+            "expected_date": expected_date,
+            "stock_request_ids": [
+                (
+                    0,
+                    0,
+                    {
+                        "product_id": self.product_test.id,
+                        "product_uom_id": self.product_test.uom_id.id,
+                        "product_uom_qty": 5.0,
+                        "company_id": self.main_company.id,
+                        "warehouse_id": self.warehouse.id,
+                        "location_id": self.manufacturing_loc.id,
+                        "expected_date": expected_date,
+                    },
+                )
+            ],
+        }
+        order = self.request_order.with_user(self.stock_request_user).create(vals)
+        order.with_user(self.stock_request_manager).action_confirm()
+        self.assertEqual(len(order.mapped("picking_ids")), 2)
